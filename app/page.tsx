@@ -1,13 +1,27 @@
+'use dynamic';
+
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { ProductCard } from "@/components/ProductCard";
+import type { Product, Category, Vendor } from "@prisma/client";
+
+type ProductWithRelations = Product & { vendor: { name: string; verified: boolean } | null; category: { name: string } | null };
+type VendorWithCommunity = Vendor & { community: { name: string } | null };
 
 export default async function Home() {
-  const [products, categories, vendors] = await Promise.all([
-    db.product.findMany({ where: { active: true }, include: { vendor: true, category: true }, orderBy: [{ featured: "desc" }, { createdAt: "desc" }], take: 8 }),
-    db.category.findMany({ take: 8 }),
-    db.vendor.findMany({ where: { verified: true }, include: { community: true }, take: 4 })
-  ]);
+  let products: ProductWithRelations[] = [];
+  let categories: Category[] = [];
+  let vendors: VendorWithCommunity[] = [];
+
+  try {
+    [products, categories, vendors] = await Promise.all([
+      db.product.findMany({ where: { active: true }, include: { vendor: true, category: true }, orderBy: [{ featured: "desc" }, { createdAt: "desc" }], take: 8 }),
+      db.category.findMany({ take: 8 }),
+      db.vendor.findMany({ where: { verified: true }, include: { community: true }, take: 4 })
+    ]);
+  } catch (error) {
+    console.error('Database error:', error);
+  }
 
   return (
     <main>

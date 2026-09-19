@@ -1,14 +1,51 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
   --brand: #0f766e;
   --brand-dark: #064e3b;
   --cream: #fffaf0;
   --ink: #10231f;
+  --arewa-green: #0a4f25;
+  --arewa-gold: #e8b923;
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; background: #fafaf9; color: var(--ink); }
-a { text-decoration: none; }
-button, input, select { font: inherit; }
-.container { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fafaf9;
+  color: var(--ink);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+a {
+  text-decoration: none;
+}
+
+button, input, select {
+  font: inherit;
+}
+
+.container {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.btn-primary {
+  background-color: #047857;
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1.5rem;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: #065f46;
+}
