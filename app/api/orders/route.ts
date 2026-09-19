@@ -1,38 +1,139 @@
-import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { z } from "zod";
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { getCurrentUser } from '@/lib/auth';
+import { z } from 'zod';
 
-const schema = z.object({
-  name: z.string().min(2),
-  phone: z.string().min(7),
-  address: z.string().min(5),
-  items: z.array(z.object({ id: z.string(), quantity: z.number().int().min(1) })).min(1)
+const createOrderSchema = z.object({
+  cartItems: z.array(z.object({
+    productId: z.string(),
+    quantity: z.number().int().positive(),
+  })),
+  address: z.string().min(10),
+  whatsapp: z.string().optional(),
 });
+
+export async function GET(req: Request) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
+    const skip = (page - 1) * limit;
+
+    const [orders, total] = await Promise.all([
+      db.order.findMany({
+        where: { customerId: user.userId },
+        include: {
+          items: { include: { product: true } },
+          payment: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      db.order.count({ where: { customerId: user.userId } }),
+    ]);
+
+    return NextResponse.json({
+      orders,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
+  } catch (error) {
+    console.error('Orders fetch error:', error);
+    return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
+  }
+}
 
 export async function POST(req: Request) {
   try {
-    const body = schema.parse(await req.json());
-    const products = await db.product.findMany({ where: { id: { in: body.items.map(i => i.id) }, active: true }, include: { vendor: true } });
-    if (products.length !== body.items.length) return NextResponse.json({ error: "Some products are unavailable." }, { status: 400 });
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    const subtotal = products.reduce((sum, p) => {
-      const qty = body.items.find(i => i.id === p.id)!.quantity;
-      return sum + p.price * qty;
-    }, 0);
+    const body = await req.json();
+    const { cartItems, address, whatsapp } = createOrderSchema.parse(body);
 
-    let customer = await db.user.findFirst({ where: { phone: body.phone } });
-    if (!customer) customer = await db.user.create({ data: { name: body.name, phone: body.phone, email: `${body.phone}@customer.arewamart.local` } });
+    if (!cartItems.length) {
+      return NextResponse.json({ error: 'Cart is empty' }, { status: 400 });
+    }
+
+    const orderItems: Array<{
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+    }> = [];
+    let subtotal = 0;
+    let vendorId: string | undefined;
+
+    for (const item of cartItems) {
+      const product = await db.product.findUnique({
+        where: { id: item.productId },
+        include: { vendor: true },
+      });
+
+      if (!product || !product.active) {
+        return NextResponse.json(
+          { error: `Product ${item.productId} not found or inactive` },
+          { status: 400 }
+        );
+      }
+
+      orderItems.push({
+        productId: product.id,
+        quantity: item.quantity,
+        unitPrice: product.price,
+      });
+
+      subtotal += product.price * item.quantity;
+      if (!vendorId && product.vendorId) {
+        vendorId = product.vendorId;
+      }
+    }
 
     const orderNumber = `AM-${Date.now().toString(36).toUpperCase()}`;
+
     const order = await db.order.create({
       data: {
-        orderNumber, customerId: customer.id, subtotal, total: subtotal, address: body.address, whatsapp: body.phone,
-        vendorId: products[0].vendorId,
-        items: { create: products.map(p => ({ productId: p.id, quantity: body.items.find(i => i.id === p.id)!.quantity, unitPrice: p.price })) }
-      }
+        orderNumber,
+        customerId: user.userId,
+        vendorId,
+        subtotal,
+        deliveryFee: 0,
+        discountAmount: 0,
+        total: subtotal,
+        currency: 'NGN',
+        status: 'PENDING_PAYMENT',
+        paymentStatus: 'PENDING',
+        address,
+        whatsapp,
+        items: {
+          create: orderItems,
+        },
+      },
+      include: {
+        items: { include: { product: true } },
+        payment: true,
+      },
     });
-    return NextResponse.json({ orderNumber: order.orderNumber });
-  } catch {
-    return NextResponse.json({ error: "Invalid order request." }, { status: 400 });
+
+    // Clear cart items for this user
+    await db.cartItem.deleteMany({
+      where: {
+        cart: { userId: user.userId },
+      },
+    });
+
+    return NextResponse.json(order, { status: 201 });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 });
+    }
+    console.error('Order creation error:', error);
+    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
   }
 }

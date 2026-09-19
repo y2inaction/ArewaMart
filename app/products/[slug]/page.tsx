@@ -6,15 +6,16 @@ import { AddToCart } from "./AddToCart";
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const product = await db.product.findUnique({ where: { slug }, include: { vendor: true, category: true } });
+  const product = await db.product.findUnique({ where: { slug }, include: { vendor: true, category: true, images: true } });
   if (!product) notFound();
 
   const wa = product.vendor.whatsapp || process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "";
   const message = `Sannu, ina sha'awar ${product.name} a ArewaMart. Farashi: ${formatNaira(product.price)}.`;
+  const imageUrl = product.images?.[0]?.url || "https://via.placeholder.com/400";
   return (
     <main className="container py-10">
       <div className="grid md:grid-cols-2 gap-10">
-        <img src={product.imageUrl} alt={product.name} className="w-full rounded-3xl aspect-square object-cover" />
+        <img src={imageUrl} alt={product.name} className="w-full rounded-3xl aspect-square object-cover" />
         <div className="py-4">
           <div className="text-emerald-700 font-bold">{product.vendor.verified ? "✓ Verified Vendor" : "Vendor"}</div>
           <h1 className="text-4xl font-black mt-2">{product.name}</h1>
