@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  --brand: #0f766e;
+  --brand-dark: #064e3b;
+  --cream: #fffaf0;
+  --ink: #10231f;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #fafaf9; color: var(--ink); }
+a { text-decoration: none; }
+button, input, select { font: inherit; }
+.container { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }

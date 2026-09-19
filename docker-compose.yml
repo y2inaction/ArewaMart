@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: arewamart_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: arewamart
+      POSTGRES_USER: arewamart
+      POSTGRES_PASSWORD: arewamart
+    volumes:
+      - arewamart_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U arewamart -d arewamart"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arewamart_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://arewamart:arewamart@db:5432/arewamart?schema=public
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      NEXT_PUBLIC_WHATSAPP_NUMBER: ${NEXT_PUBLIC_WHATSAPP_NUMBER:-2348000000000}
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+    ports:
+      - "3000:3000"
+    command: sh -c "npx prisma db push && npm run db:seed && npm run start"
+
+volumes:
+  arewamart_pgdata:
